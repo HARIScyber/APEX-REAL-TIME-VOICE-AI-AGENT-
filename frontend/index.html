@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Apex Real-Time Voice AI Agent | Sub-Second Voice Orchestration</title>
+  <meta name="description" content="Ultra low-latency real-time voice agent powered by AssemblyAI STT, Multi-LLM streaming, and custom FastAPI orchestration." />
+  
+  <!-- Modern Typography from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="/static/css/style.css" />
+
+  <style>
+    /* ── Diagnostics Panel ─────────────────────────────────────────────── */
+    .diag-panel {
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin: 10px 0 0 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+    .diag-panel h4 {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+      margin: 0 0 8px 0;
+    }
+    .diag-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 16px;
+    }
+    .diag-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 0;
+    }
+    .diag-label {
+      color: rgba(255,255,255,0.4);
+      min-width: 80px;
+    }
+    .diag-value {
+      color: rgba(255,255,255,0.75);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 200px;
+    }
+    .diag-ok   { color: #00e5a0 !important; }
+    .diag-warn { color: #ffb900 !important; }
+    .diag-error{ color: #ff4466 !important; }
+
+    /* ── Mock mode warning ─────────────────────────────────────────────── */
+    #mockModeWarning {
+      display: none;
+      color: #ffb900;
+      font-size: 11px;
+      font-weight: 600;
+      margin-left: 6px;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.5; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-background">
+    <div class="glow-orb orb-primary"></div>
+    <div class="glow-orb orb-secondary"></div>
+    <div class="grid-overlay"></div>
+  </div>
+
+  <div class="app-container">
+    <!-- Top Navigation Bar -->
+    <header class="top-nav">
+      <div class="brand">
+        <div class="logo-symbol">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" y1="19" x2="12" y2="22" />
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">APEX VOICE</span>
+          <span class="brand-subtitle">Real-Time Voice AI Orchestrator</span>
+        </div>
+      </div>
+
+      <div class="nav-controls">
+        <!-- Persona Selector -->
+        <div class="control-pill">
+          <label for="personaSelect">Persona:</label>
+          <select id="personaSelect">
+            <option value="customer_support" selected>Customer Support</option>
+            <option value="sales">Sales &amp; Orders</option>
+            <option value="healthcare">Healthcare Triage</option>
+            <option value="smart_home">Smart Home Controller</option>
+            <option value="enterprise_knowledge">Enterprise RAG</option>
+          </select>
+        </div>
+
+        <!-- Voice Engine Selector -->
+        <div class="control-pill engine-pill">
+          <label for="engineSelect">Engine:</label>
+          <select id="engineSelect">
+            <option value="assemblyai" selected>AssemblyAI (Default)</option>
+            <option value="personaplex">NVIDIA PersonaPlex</option>
+            <option value="hybrid">Hybrid (Smart Router)</option>
+          </select>
+        </div>
+
+        <!-- Model Provider Selector -->
+        <div class="control-pill">
+          <label for="modelSelect">LLM:</label>
+          <select id="modelSelect">
+            <option value="gemini" selected>Gemini 2.5 Flash</option>
+            <option value="openai">OpenAI GPT-4o-mini</option>
+            <option value="anthropic">Claude 3.5 Sonnet</option>
+            <option value="groq">Groq (Llama 3.3)</option>
+            <option value="mock">⚠️ DEV MOCK (no audio)</option>
+          </select>
+          <span id="mockModeWarning">⚠️ MOCK</span>
+        </div>
+
+        <!-- WebSocket Status Indicator -->
+        <div id="wsStatus" class="status-badge connecting">
+          <span class="pulse-dot"></span>
+          <span class="status-label">Connecting</span>
+        </div>
+
+        <!-- Settings Modal Trigger -->
+        <button id="btnOpenSettings" class="btn-icon" title="API Keys &amp; Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="main-content">
+      <!-- Visualizer & Microphone Centerstage -->
+      <section class="visualizer-section">
+        <div class="visualizer-card">
+          <div class="visualizer-header">
+            <div class="state-indicator" id="agentStateLabel">
+              <span class="state-ring"></span>
+              <span id="stateText">Ready to Listen</span>
+            </div>
+            <div class="bargein-badge" id="bargeinBadge" title="Barge-In Interruption Enabled">
+              <span class="badge-icon">⚡</span> Interruption Ready
+            </div>
+          </div>
+
+          <!-- Interactive Audio Waveform Canvas -->
+          <div class="canvas-wrapper">
+            <canvas id="waveformCanvas"></canvas>
+            <div class="orb-center" id="orbCenter"></div>
+          </div>
+
+          <!-- Main Microphone Control Button -->
+          <div class="mic-controls">
+            <button id="btnMic" class="btn-mic" aria-label="Toggle Microphone">
+              <div class="ripple-ring ring-1"></div>
+              <div class="ripple-ring ring-2"></div>
+              <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="22" />
+              </svg>
+            </button>
+            <span class="mic-hint">Click microphone or hold <strong>Space</strong> to talk</span>
+          </div>
+
+          <!-- Quick Scenario Prompts -->
+          <div class="quick-prompts">
+            <span class="quick-label">Try asking:</span>
+            <button class="prompt-chip" data-text="What is the status of my order ORD-1001?">📦 Order ORD-1001</button>
+            <button class="prompt-chip" data-text="What is your return and refund policy?">🔄 Return Policy</button>
+            <button class="prompt-chip" data-text="Turn on the living room lights and set AC to 72.">💡 Smart Home</button>
+            <button class="prompt-chip" data-text="Does standard warranty cover accidental spills?">🛡️ Warranty</button>
+          </div>
+
+          <!-- ── Real-Time Diagnostics Panel (new) ───────────────────── -->
+          <div class="diag-panel">
+            <h4>🔍 Pipeline Status</h4>
+            <div class="diag-grid">
+              <div class="diag-row">
+                <span class="diag-label">STT</span>
+                <span class="diag-value" id="diagSttStatus">Checking…</span>
+              </div>
+              <div class="diag-row">
+                <span class="diag-label">LLM</span>
+                <span class="diag-value" id="diagLlmStatus">Checking…</span>
+              </div>
+              <div class="diag-row">
+                <span class="diag-label">TTS</span>
+                <span class="diag-value" id="diagTtsStatus">Checking…</span>
+              </div>
+              <div class="diag-row">
+                <span class="diag-label">Turn ID</span>
+                <span class="diag-value" id="diagTurnId">—</span>
+              </div>
+              <div class="diag-row" style="grid-column: 1 / -1;">
+                <span class="diag-label">Last transcript</span>
+                <span class="diag-value" id="diagLastTranscript">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Live Dual-Stream Transcript Console -->
+      <section class="transcript-section">
+        <div class="transcript-card">
+          <div class="card-header">
+            <h3>Live Conversation &amp; Reasoning</h3>
+            <button id="btnClearChat" class="btn-ghost-sm">Clear</button>
+          </div>
+
+          <div class="chat-stream" id="chatStream">
+            <!-- Initial Welcome Message -->
+            <div class="message assistant-message">
+              <div class="avatar">AI</div>
+              <div class="bubble">
+                <div class="meta">Assistant • Ready</div>
+                <div class="text">
+                  Hello! I am your real-time voice agent. Press the microphone or click any suggested prompt below to test sub-second speech transcription, tool calling, and live voice synthesis.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Real-time Partial Utterance Bar -->
+          <div class="live-partial-bar" id="livePartialBar">
+            <span class="live-tag">LIVE STT:</span>
+            <span class="partial-text" id="partialTranscriptText">Listening for speech...</span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom Telemetry HUD Bar -->
+    <footer class="telemetry-hud">
+      <div class="hud-item pipeline-badge-item">
+        <span class="hud-label">Active Engine</span>
+        <span class="hud-value highlight-cyan" id="hudActiveEngine">AssemblyAI + Gemini</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-item">
+        <span class="hud-label">STT Mode</span>
+        <span class="hud-value" id="hudSTTMode">—</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-item">
+        <span class="hud-label">LLM TTFT</span>
+        <span class="hud-value highlight" id="hudTTFT">-- ms</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-item">
+        <span class="hud-label">First Audio</span>
+        <span class="hud-value highlight" id="hudTTFA">-- ms</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-item">
+        <span class="hud-label">Roundtrip</span>
+        <span class="hud-value" id="hudTotalTurn">-- ms</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-item">
+        <span class="hud-label">STT / VAD</span>
+        <span class="hud-value" id="hudSTTLatency">-- ms</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-item">
+        <span class="hud-label">LLM / TTS ms</span>
+        <span class="hud-value" id="hudGenerationTotal">--</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-item">
+        <span class="hud-label">Tool / RAG ms</span>
+        <span class="hud-value" id="hudToolLatency">--</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-item">
+        <span class="hud-label">PP Load</span>
+        <span class="hud-value" id="hudPPLoad">-- ms</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-item">
+        <span class="hud-label">PP Inference</span>
+        <span class="hud-value highlight-purple" id="hudPPInference">-- ms</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-item">
+        <span class="hud-label">PP First Audio</span>
+        <span class="hud-value highlight-purple" id="hudPPTTFA">-- ms</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-item">
+        <span class="hud-label">PP Roundtrip</span>
+        <span class="hud-value" id="hudPPTotal">-- ms</span>
+      </div>
+      <div class="hud-divider"></div>
+      <div class="hud-item">
+        <span class="hud-label">PP Hardware</span>
+        <span class="hud-value status-notice" id="hudPPStatus">Checking...</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Session Settings Modal -->
+  <div id="settingsModal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Agent Configuration</h2>
+        <button id="btnCloseSettings" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">
+          Provider credentials are loaded only from secure server environment variables.
+          API keys are never sent to or stored in the browser.
+        </p>
+
+        <div class="form-group">
+          <label for="ttsVoiceSelect">Fallback Browser Voice (used if ElevenLabs unavailable):</label>
+          <select id="ttsVoiceSelect">
+            <option value="">Default System Voice</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnSaveSettings" class="btn-primary">Save &amp; Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/audio-processor.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

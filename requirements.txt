@@ -1,0 +1,10 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+websockets>=12.0
+httpx>=0.27.0
+python-dotenv>=1.0.1
+pydantic>=2.6.0
+aiofiles>=23.2.1
+# moshi is optional — only needed for NVIDIA PersonaPlex (requires CUDA GPU with >=12GB VRAM)
+# Uncomment the line below if you have a compatible NVIDIA GPU and wish to use PersonaPlex:
+# moshi>=0.2.13
